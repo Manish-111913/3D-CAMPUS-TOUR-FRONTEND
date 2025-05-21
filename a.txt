@@ -1,0 +1,4 @@
+Models should be updated in three places 
+  1. In public folder we should add the models.
+  2. In HTML code we have update in select models paths.
+  3. In script.js code add the model name similar to above models.

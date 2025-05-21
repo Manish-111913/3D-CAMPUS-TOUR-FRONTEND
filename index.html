@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Virtual Tour</title>
+    <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+    <!-- Landing Page -->
+    <div class="landing-page" id="landingPage">
+        <div class="hero-section">
+            <div class="hero-content">
+                <h1>Experience Your Campus</h1>
+                <p>Explore our university in stunning 3D detail</p>
+                <button id="startTourButton" class="cta-button">Start Tour</button>
+            </div>
+        </div>
+
+        <div class="features-section">
+            <h2>Discover Our Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="icon">🏛️</div>
+                    <h3>Interactive Buildings</h3>
+                    <p>Explore every building with detailed 3D models and interior views</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🗺️</div>
+                    <h3>Guided Tours</h3>
+                    <p>Take guided tours of specific departments or areas of interest</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🎯</div>
+                    <h3>Campus Map</h3>
+                    <p>Navigate easily with our interactive campus map</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">👥</div>
+                    <h3>Virtual Events</h3>
+                    <p>Join virtual campus events and information sessions</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">📸</div>
+                    <h3>360° Views</h3>
+                    <p>Experience panoramic views of campus landmarks</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">ℹ️</div>
+                    <h3>Information Points</h3>
+                    <p>Access detailed information about facilities and services</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="preview-section">
+            <div class="preview-content">
+                <div class="preview-text">
+                    <h2>Immersive Campus Experience</h2>
+                    <p>Our 3D campus tour provides an immersive experience that lets you explore every corner of our university. 
+                       Whether you're a prospective student, parent, or visitor, you'll get an authentic feel for our campus life.</p>
+                    <ul class="feature-list">
+                        <li>High-quality 3D renderings of buildings</li>
+                        <li>Real-time navigation system</li>
+                        <li>Information hotspots throughout the tour</li>
+                    </ul>
+                </div>
+                <div class="preview-image">
+                    <img src="https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&q=80" alt="Campus Preview">
+                    <div class="stats-card">
+                        <p class="stats-number">100+</p>
+                        <p class="stats-label">Interactive Points</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="cta-section">
+            <h2>Ready to Explore Our Campus?</h2>
+            <p>Start your virtual journey today and discover what makes our campus unique.</p>
+            <button id="beginTourButton" class="cta-button inverse">Begin Tour Now</button>
+        </div>
+    </div>
+
+    <!-- Auth Form -->
+    <div class="auth-form" id="authForm" style="display: none;">
+        <div class="auth-container">
+            <div class="auth-content">
+                <h2 id="authTitle">Welcome Back</h2>
+                <p id="authSubtitle">Sign in to continue your journey</p>
+
+                <form id="authFormElement">
+                    <div class="form-group" id="fullNameGroup" style="display: none;">
+                        <label>Full Name</label>
+                        <div class="input-group">
+                            <span class="input-icon">👤</span>
+                            <input type="text" name="fullName" placeholder="Enter your name">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Email Address</label>
+                        <div class="input-group">
+                            <span class="input-icon">✉️</span>
+                            <input type="email" name="email" placeholder="Enter your email" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Password</label>
+                        <div class="input-group">
+                            <span class="input-icon">🔒</span>
+                            <input type="password" name="password" placeholder="Enter your password" required>
+                        </div>
+                    </div>
+
+                    <div class="form-options" id="loginOptions">
+                        <div class="remember-me">
+                            <input type="checkbox" id="rememberMe">
+                            <label for="rememberMe">Remember me</label>
+                        </div>
+                        <a href="#" class="forgot-password">Forgot password?</a>
+                    </div>
+
+                    <button type="submit" class="submit-button">
+                        <span id="authButtonText">Sign In</span>
+                        <span class="arrow">→</span>
+                    </button>
+                </form>
+
+                <div class="auth-footer">
+                    <button id="toggleAuthButton" class="toggle-auth">
+                        Don't have an account? Sign up
+                    </button>
+                    <button id="returnHomeButton" class="return-home">
+                        Return to Home
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="dashboard" id="dashboard" style="display: none;">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h1 class="sidebar-title">Campus Tour</h1>
+                <button id="sidebarToggleButton" class="sidebar-toggle">
+                    <span class="toggle-icon">☰</span>
+                </button>
+            </div>
+
+            <nav class="sidebar-nav">
+                <button id="navTourButton" class="nav-item active">
+                    <span class="nav-icon">🏠</span>
+                    <span class="nav-label">3D Tour</span>
+                </button>
+                <button id="navBuildingsButton" class="nav-item">
+                    <span class="nav-icon">📚</span>
+                    <span class="nav-label">Buildings</span>
+                </button>
+                <button id="navEventsButton" class="nav-item">
+                    <span class="nav-icon">📅</span>
+                    <span class="nav-label">Events</span>
+                </button>
+            </nav>
+
+            <button id="logoutButton" class="logout-button">
+                <span class="nav-icon">🚪</span>
+                <span class="nav-label">Logout</span>
+            </button>
+        </div>
+
+        <div class="main-content" id="mainContent">
+            <div class="topbar">
+                <h2 class="page-title" id="pageTitle">3D Tour</h2>
+                <div class="user-menu">
+                    <button class="notifications">
+                        <span class="nav-icon">🔔</span>
+                    </button>
+                    <div class="user-profile">
+                        <div class="avatar">👤</div>
+                        <span class="username"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-area">
+                <!-- Tour View -->
+                <div class="view tour-view" id="tourView">
+                    <div class="tour-container">
+                        <div class="viewer">
+                            <canvas id="threeCanvas"></canvas>
+                        </div>
+                        
+                        <div class="controls-sidebar">
+                            <div class="quick-nav">
+                                <h3>Quick Navigation</h3>
+                                <div class="location-list" id="locationList">
+                                    <!-- Dynamically populated with buildings -->
+                                </div>
+                            </div>
+
+                            <div class="tour-controls">
+                                <h3>Tour Controls</h3>
+                                <div class="control-grid">
+                                    <button id="resetViewButton">Reset View</button>
+                                    <button id="fullScreenButton">Full Screen</button>
+                                    <button id="zoomInButton">Zoom In</button>
+                                    <button id="zoomOutButton">Zoom Out</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="info-panel">
+                        <h3 id="currentLocation">Current Location: Main Campus</h3>
+                        <p id="locationDescription">The main campus features modern architecture blending with historical buildings,
+                           creating a unique learning environment for our students.</p>
+                        <div class="info-grid">
+                            <div class="info-card">
+                                <h4>Opening Hours</h4>
+                                <p>24/7 Access</p>
+                            </div>
+                            <div class="info-card">
+                                <h4>Facilities</h4>
+                                <p>WiFi, Study Areas, Cafeteria</p>
+                            </div>
+                            <div class="info-card">
+                                <h4>Contact</h4>
+                                <p>info@campus.edu</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Buildings View -->
+                <div class="view buildings-view" id="buildingsView" style="display: none;">
+                    <div class="buildings-container">
+                        <h3>Campus Buildings</h3>
+                        <!-- Admin Add Building Form -->
+                        <div class="admin-controls" id="buildingAdminControls" style="display: none;">
+                            <h4>Add New Building</h4>
+                            <form id="addBuildingForm">
+                                <div class="form-group">
+                                    <label>Name</label>
+                                    <input type="text" name="name" placeholder="Enter building name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Description</label>
+                                    <textarea name="description" placeholder="Enter description" required></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>3D Model</label>
+                                    <select name="modelPath" required>
+                                        <option value="">Select a model</option>
+                                        <option value="./public/library.glb">Library</option>
+                                        <option value="./public/student_center.glb">Student Center</option>
+                                        <option value="./public/science_building.glb">Science Building</option>
+                                        <option value="./public/sports_complex.glb">Sports Complex</option>
+                                        <option value="./public/sports_comple.glb">Sports Comple</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="submit-button">Add Building</button>
+                            </form>
+
+                            <h4>Edit Building</h4>
+                            <form id="editBuildingForm" style="display: none;">
+                                <input type="hidden" name="id">
+                                <div class="form-group">
+                                    <label>Name</label>
+                                    <input type="text" name="name" placeholder="Enter building name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Description</label>
+                                    <textarea name="description" placeholder="Enter description" required></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>3D Model</label>
+                                    <select name="modelPath" required>
+                                        <option value="">Select a model</option>
+                                        <option value="./public/library.glb">Library</option>
+                                        <option value="./public/student_center.glb">Student Center</option>
+                                        <option value="./public/science_building.glb">Science Building</option>
+                                        <option value="./public/sports_complex.glb">Sports Complex</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="submit-button">Update Building</button>
+                                <button type="button" class="cancel-button" id="cancelEdit">Cancel</button>
+                            </form>
+                        </div>
+                        <div class="buildings-grid" id="buildingsGrid">
+                            <!-- Dynamically populated -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Events View -->
+                <div class="view events-view" id="eventsView" style="display: none;">
+                    <div class="events-container">
+                        <h3>Upcoming Campus Events</h3>
+                        <!-- Admin Add Event Form -->
+                        <div class="admin-controls" id="eventAdminControls" style="display: none;">
+                            <h4>Add New Event</h4>
+                            <form id="addEventForm">
+                                <div class="form-group">
+                                    <label>Name</label>
+                                    <input type="text" name="name" placeholder="Enter event name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Date</label>
+                                    <input type="date" name="date" required>
+                                </div>
+                                <button type="submit" class="submit-button">Add Event</button>
+                            </form>
+                        </div>
+                        <div class="events-grid" id="eventsGrid">
+                            <!-- Dynamically populated -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+    <script src="src/script.js"></script>
+</body>
+</html>
