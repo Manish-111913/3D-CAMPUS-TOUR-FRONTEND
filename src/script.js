@@ -2,13 +2,30 @@ let isLogin = true;
 let isSidebarOpen = true;
 let scene, camera, renderer, controls;
 let currentModel = null;
-let arrowSprite = null;
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
 let velocity = new THREE.Vector3();
 const clock = new THREE.Clock();
 let isThreeJSInitialized = false;
 let userRole = 'user';
-let initialCanvasSize = null; // Store initial canvas size
+let initialCanvasSize = null;
+
+// Hotspot variables
+let hotspots = [];
+let currentMode = 'view';
+let isDragging = false;
+let draggedHotspot = null;
+let raycaster = new THREE.Raycaster();
+let mouse = new THREE.Vector2();
+let uiOverlay = null;
+
+// Alert debouncing
+let isAlertShowing = false;
+function showAlert(message) {
+    if (isAlertShowing) return;
+    isAlertShowing = true;
+    alert(message);
+    isAlertShowing = false;
+}
 
 // Predefined list of available .glb models
 const availableModels = {
@@ -38,14 +55,14 @@ function init3DScene() {
     const mainContent = document.getElementById('mainContent');
 
     // Calculate available width based on mainContent, accounting for sidebar
-    const sidebarWidth = isSidebarOpen ? 16 * 16 : 5 * 16; // 16rem or 5rem in pixels (1rem = 16px)
+    const sidebarWidth = isSidebarOpen ? 16 * 16 : 5 * 16;
     const availableWidth = mainContent.clientWidth;
     console.log('Main content width:', mainContent.clientWidth, 'Sidebar width:', sidebarWidth);
 
     // Store initial canvas size
     initialCanvasSize = {
         width: availableWidth,
-        height: container.clientHeight // Use CSS-defined height (e.g., 500px)
+        height: container.clientHeight
     };
     console.log('Initial canvas size:', initialCanvasSize);
 
@@ -86,18 +103,25 @@ function init3DScene() {
     hemiLight.position.set(0, 20, 0);
     scene.add(hemiLight);
 
+    // Initialize hotspot UI
+    uiOverlay = document.getElementById('ui-overlay');
+    if (userRole === 'admin') {
+        document.getElementById('hotspot-controls').style.display = 'flex';
+        initHotspotControls();
+    }
+
     // Load default main campus model
     loadModel('./public/main_campus.glb', () => {
         document.getElementById('currentLocation').textContent = 'Current Location: Main Campus';
         document.getElementById('locationDescription').textContent = 'The main campus features modern architecture blending with historical buildings, creating a unique learning environment for our students.';
-        currentModelIndex = 0; // Reset index for hotspot cycling
+        currentModelIndex = 0;
+        fetchHotspots(modelPaths[currentModelIndex]);
     });
 
     // Handle fullscreen changes
     const onFullscreenChange = () => {
         console.log('Fullscreen changed');
         if (document.fullscreenElement) {
-            // In fullscreen, use full screen size
             const width = window.innerWidth;
             const height = window.innerHeight;
             camera.aspect = width / height;
@@ -107,7 +131,6 @@ function init3DScene() {
             canvas.style.height = `${height}px`;
             console.log('Fullscreen size:', width, height);
         } else {
-            // Restore initial size
             camera.aspect = initialCanvasSize.width / initialCanvasSize.height;
             camera.updateProjectionMatrix();
             renderer.setSize(initialCanvasSize.width, initialCanvasSize.height);
@@ -115,9 +138,22 @@ function init3DScene() {
             canvas.style.height = `${initialCanvasSize.height}px`;
             console.log('Restored initial size:', initialCanvasSize);
         }
+        updateHotspotPositions();
     };
 
     document.addEventListener('fullscreenchange', onFullscreenChange);
+
+    // Window resize handler
+    window.addEventListener('resize', () => {
+        const newWidth = mainContent.clientWidth;
+        const newHeight = container.clientHeight;
+        camera.aspect = newWidth / newHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(newWidth, newHeight);
+        canvas.style.width = `${newWidth}px`;
+        canvas.style.height = `${newHeight}px`;
+        updateHotspotPositions();
+    });
 
     // Animation loop
     function animate() {
@@ -134,7 +170,7 @@ function init3DScene() {
         controls.getObject().translateX(velocity.x * delta);
         controls.getObject().translateZ(velocity.z * delta);
 
-        if (arrowSprite) arrowSprite.lookAt(camera.position);
+        updateHotspotPositions();
 
         renderer.render(scene, camera);
     }
@@ -142,6 +178,10 @@ function init3DScene() {
 
     // Keyboard controls
     document.addEventListener('keydown', (event) => {
+        // Ignore keyboard events if an input or textarea is focused
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+            return;
+        }
         switch (event.code) {
             case 'ArrowUp':
             case 'KeyW':
@@ -163,6 +203,10 @@ function init3DScene() {
     });
 
     document.addEventListener('keyup', (event) => {
+        // Ignore keyboard events if an input or textarea is focused
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+            return;
+        }
         switch (event.code) {
             case 'ArrowUp':
             case 'KeyW':
@@ -178,10 +222,421 @@ function init3DScene() {
                 break;
             case 'ArrowRight':
             case 'KeyD':
-                moveRight = true;
+                moveRight = false;
                 break;
         }
     });
+
+    // Hotspot event listeners
+    canvas.addEventListener('mousedown', onHotspotMouseDown);
+    canvas.addEventListener('mousemove', onHotspotMouseMove);
+    canvas.addEventListener('mouseup', onHotspotMouseUp);
+}
+
+function initHotspotControls() {
+    document.getElementById('add-hotspot').addEventListener('click', () => {
+        currentMode = 'add';
+        updateModeIndicator();
+    });
+    document.getElementById('toggle-edit').addEventListener('click', () => {
+        currentMode = currentMode === 'edit' ? 'view' : 'edit';
+        updateModeIndicator();
+        updateHotspotStyles();
+    });
+    document.getElementById('toggle-delete').addEventListener('click', () => {
+        currentMode = currentMode === 'delete' ? 'view' : 'delete';
+        updateModeIndicator();
+        updateHotspotStyles();
+    });
+    document.getElementById('clear-all').addEventListener('click', async () => {
+        if (confirm('Are you sure you want to delete all hotspots for this building?')) {
+            try {
+                const response = await fetch(`https://threed-campus-tour-backend.onrender.com/api/hotspots/building/${encodeURIComponent(modelPaths[currentModelIndex])}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                if (response.ok) {
+                    hotspots.forEach(h => {
+                        if (h.element) h.element.remove();
+                        if (h.tooltip) h.tooltip.remove();
+                    });
+                    hotspots = [];
+                    updateHotspotCounter();
+                    showAlert('All hotspots cleared.');
+                } else {
+                    const data = await response.json();
+                    showAlert(data.message || 'Failed to clear hotspots.');
+                }
+            } catch (error) {
+                console.error('Error clearing hotspots:', error);
+                showAlert('Error clearing hotspots.');
+            }
+        }
+    });
+}
+
+function updateModeIndicator() {
+    const modeIndicator = document.getElementById('mode-indicator');
+    modeIndicator.textContent = `${currentMode.charAt(0).toUpperCase() + currentMode.slice(1)} Mode`;
+}
+
+function updateHotspotStyles() {
+    hotspots.forEach(hotspot => {
+        if (hotspot.element) {
+            hotspot.element.classList.remove('edit-mode', 'delete-mode');
+            if (currentMode === 'edit') {
+                hotspot.element.classList.add('edit-mode');
+            } else if (currentMode === 'delete') {
+                hotspot.element.classList.add('delete-mode');
+            }
+        }
+    });
+}
+
+function updateHotspotCounter() {
+    document.getElementById('hotspot-counter').textContent = `Hotspots: ${hotspots.length}`;
+}
+
+function createHotspotElement(hotspotData) {
+    if (!hotspotData._id || !hotspotData.position) {
+        console.error('Invalid hotspot data:', hotspotData);
+        return null;
+    }
+
+    const hotspot = document.createElement('div');
+    hotspot.className = 'hotspot';
+    hotspot.dataset.id = hotspotData._id;
+    uiOverlay.appendChild(hotspot);
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tooltip';
+    tooltip.innerHTML = `
+        <h3>Hotspot Info</h3>
+        <div class="tooltip-content">${hotspotData.content || 'No information available'}</div>
+        ${userRole === 'admin' ? `
+            <textarea style="display: none;">${hotspotData.content || ''}</textarea>
+            <button class="save-btn" style="display: none;">Save</button>
+            <button class="delete-btn" style="display: none;">Delete</button>
+        ` : ''}
+        <span class="close-btn">×</span>
+    `;
+    uiOverlay.appendChild(tooltip);
+
+    hotspot.tooltip = tooltip;
+    hotspot.element = hotspot;
+
+    hotspot.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (currentMode === 'view') {
+            toggleTooltip(hotspotData, hotspot, tooltip);
+        } else if (currentMode === 'delete' && userRole === 'admin') {
+            deleteHotspot(hotspotData._id);
+        }
+    });
+
+    if (userRole === 'admin') {
+        tooltip.querySelector('.save-btn')?.addEventListener('click', async () => {
+            const newContent = tooltip.querySelector('textarea').value;
+            const originalCameraPosition = camera.position.clone();
+            try {
+                const response = await fetch(`https://threed-campus-tour-backend.onrender.com/api/hotspots/${hotspotData._id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ content: newContent })
+                });
+                if (response.ok) {
+                    hotspotData.content = newContent;
+                    tooltip.querySelector('.tooltip-content').textContent = newContent || 'No information available';
+                    toggleTooltip(hotspotData, hotspot, tooltip, false);
+                } else {
+                    const data = await response.json();
+                    showAlert(data.message || 'Failed to update hotspot.');
+                }
+            } catch (error) {
+                console.error('Error updating hotspot:', error);
+                showAlert('Error updating hotspot.');
+            } finally {
+                camera.position.copy(originalCameraPosition);
+                camera.updateProjectionMatrix();
+            }
+        });
+
+        tooltip.querySelector('.delete-btn')?.addEventListener('click', () => {
+            deleteHotspot(hotspotData._id);
+        });
+    }
+
+    tooltip.querySelector('.close-btn').addEventListener('click', () => {
+        toggleTooltip(hotspotData, hotspot, tooltip, false);
+    });
+
+    return hotspot;
+}
+
+function toggleTooltip(hotspotData, hotspot, tooltip, show = true) {
+    const originalCameraPosition = camera.position.clone();
+    hotspots.forEach(h => {
+        if (h.tooltip && h !== hotspot) {
+            h.tooltip.style.display = 'none';
+            if (userRole === 'admin') {
+                h.tooltip.querySelector('textarea').style.display = 'none';
+                h.tooltip.querySelector('.save-btn').style.display = 'none';
+                h.tooltip.querySelector('.delete-btn').style.display = 'none';
+                h.tooltip.querySelector('.tooltip-content').style.display = 'block';
+            }
+        }
+    });
+
+    if (show) {
+        tooltip.style.display = 'block';
+        if (userRole === 'admin') {
+            tooltip.querySelector('.tooltip-content').style.display = 'none';
+            tooltip.querySelector('textarea').style.display = 'block';
+            tooltip.querySelector('.save-btn').style.display = 'block';
+            tooltip.querySelector('.delete-btn').style.display = 'block';
+        }
+        updateTooltipPosition(hotspotData, hotspot, tooltip);
+    } else {
+        tooltip.style.display = 'none';
+        if (userRole === 'admin') {
+            tooltip.querySelector('textarea').style.display = 'none';
+            tooltip.querySelector('.save-btn').style.display = 'none';
+            tooltip.querySelector('.delete-btn').style.display = 'none';
+            tooltip.querySelector('.tooltip-content').style.display = 'block';
+        }
+    }
+    camera.position.copy(originalCameraPosition);
+    camera.updateProjectionMatrix();
+}
+
+function updateTooltipPosition(hotspotData, hotspot, tooltip) {
+    const canvas = renderer.domElement;
+    const vector = new THREE.Vector3(hotspotData.position.x, hotspotData.position.y, hotspotData.position.z);
+    vector.project(camera);
+
+    const x = (vector.x * 0.5 + 0.5) * canvas.clientWidth;
+    const y = (-vector.y * 0.5 + 0.5) * canvas.clientHeight;
+
+    tooltip.style.left = `${x}px`;
+    tooltip.style.top = `${y}px`;
+
+    const tooltipWidth = 300;
+    const canvasRect = canvas.getBoundingClientRect();
+    if (x + tooltipWidth + 20 > canvasRect.width) {
+        tooltip.style.left = `${x - tooltipWidth - 20}px`;
+    } else {
+        tooltip.style.left = `${x + 20}px`;
+    }
+}
+
+function updateHotspotPositions() {
+    hotspots.forEach(hotspot => {
+        if (!hotspot.element || !hotspot.element.style || !hotspot.position) {
+            console.warn('Invalid hotspot:', hotspot);
+            return;
+        }
+        const vector = new THREE.Vector3(hotspot.position.x, hotspot.position.y, hotspot.position.z);
+        vector.project(camera);
+
+        const canvas = renderer.domElement;
+        const x = (vector.x * 0.5 + 0.5) * canvas.clientWidth;
+        const y = (-vector.y * 0.5 + 0.5) * canvas.clientHeight;
+
+        hotspot.element.style.left = `${x}px`;
+        hotspot.element.style.top = `${y}px`;
+
+        if (hotspot.tooltip.style.display === 'block') {
+            updateTooltipPosition(hotspot, hotspot.element, hotspot.tooltip);
+        }
+    });
+}
+
+async function fetchHotspots(modelPath) {
+    try {
+        const response = await fetch(`https://threed-campus-tour-backend.onrender.com/api/hotspots/building/${encodeURIComponent(modelPath)}`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+        });
+        if (!response.ok) {
+            const text = await response.text();
+            console.error('Fetch hotspots failed:', response.status, text);
+            throw new Error(`Failed to fetch hotspots: ${response.status}`);
+        }
+        const data = await response.json();
+        hotspots.forEach(h => {
+            if (h.element) h.element.remove();
+            if (h.tooltip) h.tooltip.remove();
+        });
+        hotspots = [];
+        data.forEach(hotspot => {
+            const element = createHotspotElement(hotspot);
+            if (element) {
+                const h = {
+                    _id: hotspot._id,
+                    position: hotspot.position,
+                    content: hotspot.content,
+                    element: element,
+                    tooltip: element.tooltip
+                };
+                hotspots.push(h);
+            }
+        });
+        updateHotspotStyles();
+        updateHotspotCounter();
+    } catch (error) {
+        console.error('Error fetching hotspots:', error);
+        showAlert('Error fetching hotspots.');
+    }
+}
+
+async function addHotspot(position) {
+    try {
+        const response = await fetch('https://threed-campus-tour-backend.onrender.com/api/hotspots', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({
+                buildingModel: modelPaths[currentModelIndex],
+                position,
+                content: 'Edit this hotspot'
+            })
+        });
+        if (!response.ok) {
+            const data = await response.json();
+            console.error('Add hotspot failed:', data);
+            throw new Error(data.message || 'Failed to add hotspot.');
+        }
+        const hotspotData = await response.json();
+        const element = createHotspotElement(hotspotData);
+        if (element) {
+            const hotspot = {
+                _id: hotspotData._id,
+                position: hotspotData.position,
+                content: hotspotData.content,
+                element: element,
+                tooltip: element.tooltip
+            };
+            hotspots.push(hotspot);
+            updateHotspotCounter();
+            currentMode = 'view';
+            updateModeIndicator();
+            updateHotspotStyles();
+        } else {
+            console.error('Failed to create hotspot element:', hotspotData);
+        }
+    } catch (error) {
+        console.error('Error adding hotspot:', error);
+        showAlert('Error adding hotspot.');
+    }
+}
+
+async function deleteHotspot(id) {
+    try {
+        const response = await fetch(`https://threed-campus-tour-backend.onrender.com/api/hotspots/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+        });
+        if (response.ok) {
+            const index = hotspots.findIndex(h => h._id === id);
+            if (index !== -1) {
+                const hotspot = hotspots[index];
+                if (hotspot.element) hotspot.element.remove();
+                if (hotspot.tooltip) hotspot.tooltip.remove();
+                hotspots.splice(index, 1);
+                updateHotspotCounter();
+                currentMode = 'view';
+                updateModeIndicator();
+                updateHotspotStyles();
+            }
+        } else {
+            const data = await response.json();
+            showAlert(data.message || 'Failed to delete hotspot.');
+        }
+    } catch (error) {
+        console.error('Error deleting hotspot:', error);
+        showAlert('Error deleting hotspot.');
+    }
+}
+
+function onHotspotMouseDown(event) {
+    if (currentMode !== 'add' && currentMode !== 'edit') return;
+
+    event.preventDefault();
+    mouse.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
+    mouse.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+
+    if (currentMode === 'edit' && userRole === 'admin') {
+        const intersects = raycaster.intersectObjects(hotspots.map(h => {
+            const obj = new THREE.Object3D();
+            obj.position.set(h.position.x, h.position.y, h.position.z);
+            return obj;
+        }));
+        if (intersects.length > 0) {
+            isDragging = true;
+            draggedHotspot = hotspots.find(h => h.position.x === intersects[0].object.position.x &&
+                                               h.position.y === intersects[0].object.position.y &&
+                                               h.position.z === intersects[0].object.position.z);
+        }
+    }
+}
+
+function onHotspotMouseMove(event) {
+    if (isDragging && draggedHotspot && currentMode === 'edit' && userRole === 'admin') {
+        mouse.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
+        mouse.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+
+        const intersects = raycaster.intersectObject(currentModel, true);
+        if (intersects.length > 0) {
+            const newPosition = intersects[0].point;
+            draggedHotspot.position = newPosition;
+            updateHotspotPositions();
+
+            fetch(`https://threed-campus-tour-backend.onrender.com/api/hotspots/${draggedHotspot._id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({ position: newPosition })
+            }).catch(error => {
+                console.error('Error updating hotspot position:', error);
+            });
+        }
+    }
+}
+
+function onHotspotMouseUp(event) {
+    if (currentMode === 'add' && userRole === 'admin') {
+        event.preventDefault();
+        const canvas = renderer.domElement;
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+
+        const intersects = raycaster.intersectObject(currentModel, true);
+        if (intersects.length > 0) {
+            const position = intersects[0].point;
+            console.log('Adding hotspot at:', position);
+            addHotspot(position);
+        } else {
+            console.warn('No intersection with model at:', mouse);
+        }
+    }
+    isDragging = false;
+    draggedHotspot = null;
 }
 
 function loadModel(url, onSuccess = () => {}) {
@@ -191,6 +646,13 @@ function loadModel(url, onSuccess = () => {}) {
         scene.remove(currentModel);
         disposeModel(currentModel);
     }
+
+    hotspots.forEach(h => {
+        if (h.element) h.element.remove();
+        if (h.tooltip) h.tooltip.remove();
+    });
+    hotspots = [];
+    updateHotspotCounter();
 
     loader.load(
         url,
@@ -215,13 +677,13 @@ function loadModel(url, onSuccess = () => {}) {
             scene.add(gltf.scene);
             currentModel = gltf.scene;
             console.log('Model loaded:', gltf.scene.position, gltf.scene.scale);
-            loadHotspots();
+            fetchHotspots(url);
             onSuccess();
         },
         undefined,
         (error) => {
             console.error('Error loading model:', error);
-            alert(`Failed to load 3D model: ${url}. Ensure the file exists in the public folder.`);
+            showAlert(`Failed to load 3D model: ${url}. Ensure the file exists in the public folder.`);
         }
     );
 }
@@ -237,48 +699,6 @@ function disposeModel(model) {
             }
         }
     });
-}
-
-function loadHotspots() {
-    if (arrowSprite) scene.remove(arrowSprite);
-
-    const textureLoader = new THREE.TextureLoader();
-    const arrowTexture = textureLoader.load('./public/assets/arrow.png');
-    const spriteMaterial = new THREE.SpriteMaterial({ map: arrowTexture, transparent: true });
-
-    arrowSprite = new THREE.Sprite(spriteMaterial);
-    arrowSprite.position.set(5, 2, -8);
-    arrowSprite.scale.set(2, 2, 2);
-    scene.add(arrowSprite);
-
-    // Ensure only one mousedown listener is active
-    document.removeEventListener('mousedown', onMouseClick);
-    document.addEventListener('mousedown', onMouseClick, false);
-}
-
-function onMouseClick(event) {
-    if (!arrowSprite) return;
-
-    const mouse = new THREE.Vector2();
-    mouse.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
-    mouse.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
-
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(mouse, camera);
-
-    const intersects = raycaster.intersectObject(arrowSprite, true);
-    if (intersects.length > 0) {
-        console.log('Arrow clicked. Loading next model...');
-        scene.remove(arrowSprite);
-        arrowSprite = null;
-        // Cycle to the next model
-        currentModelIndex = (currentModelIndex + 1) % modelPaths.length;
-        const nextModel = modelPaths[currentModelIndex];
-        loadModel(nextModel, () => {
-            document.getElementById('currentLocation').textContent = `Current Location: ${availableModels[nextModel]}`;
-            document.getElementById('locationDescription').textContent = `Explore the ${availableModels[nextModel]} with its unique features.`;
-        });
-    }
 }
 
 function resetView() {
@@ -430,7 +850,7 @@ async function handleAuth(event) {
                 showDashboard();
             } else {
                 console.error('Login failed:', loginData.message);
-                alert(loginData.message || 'Invalid email or password.');
+                showAlert(loginData.message || 'Invalid email or password.');
             }
         } else {
             const fullName = form.querySelector('input[name="fullName"]').value;
@@ -446,15 +866,15 @@ async function handleAuth(event) {
             console.log('Register response:', registerData);
             if (registerResponse.ok) {
                 toggleAuthMode();
-                alert('Registration successful! Please sign in.');
+                showAlert('Registration successful! Please sign in.');
             } else {
                 console.error('Registration failed:', registerData.message);
-                alert(registerData.message || 'Registration failed. Please try again.');
+                showAlert(registerData.message || 'Registration failed. Please try again.');
             }
         }
     } catch (error) {
         console.error('Connection error:', error);
-        alert('Unable to connect to the server. Please ensure the backend server is running at https://threed-campus-tour-backend.onrender.com and try again.');
+        showAlert('Unable to connect to the server. Please ensure the backend server is running at https://threed-campus-tour-backend.onrender.com and try again.');
         const usernameElement = document.querySelector('.username');
         const username = email;
         if (usernameElement) {
@@ -474,10 +894,14 @@ async function fetchBuildings() {
                 'Authorization': `Bearer ${localStorage.getItem('token')}`
             }
         });
+        if (!response.ok) {
+            const text = await response.text();
+            console.error('Fetch buildings failed:', response.status, text);
+            throw new Error('Failed to fetch buildings');
+        }
         const buildings = await response.json();
         console.log('Fetched buildings:', buildings);
         
-        // Update buildings grid
         const buildingsGrid = document.getElementById('buildingsGrid');
         buildingsGrid.innerHTML = '';
         buildings.forEach(building => {
@@ -499,7 +923,6 @@ async function fetchBuildings() {
             buildingsGrid.appendChild(buildingCard);
         });
 
-        // Update location list in tour view
         const locationList = document.getElementById('locationList');
         locationList.innerHTML = '';
         buildings.forEach(building => {
@@ -513,14 +936,12 @@ async function fetchBuildings() {
             }
         });
 
-        // Add event listeners for view, edit, and delete
         document.querySelectorAll('.view-details').forEach(button => {
             button.addEventListener('click', () => {
                 const id = button.getAttribute('data-id');
                 const building = buildings.find(b => b._id === id);
                 if (building && building.modelPath) {
                     setActiveView('tour');
-                    // Find index of the model for hotspot cycling
                     currentModelIndex = modelPaths.indexOf(building.modelPath);
                     if (currentModelIndex === -1) currentModelIndex = 0;
                     loadModel(building.modelPath, () => {
@@ -528,7 +949,7 @@ async function fetchBuildings() {
                         document.getElementById('locationDescription').textContent = building.description;
                     });
                 } else {
-                    alert('No 3D model associated with this building.');
+                    showAlert('No 3D model associated with this building.');
                 }
             });
         });
@@ -550,7 +971,7 @@ async function fetchBuildings() {
         }
     } catch (error) {
         console.error('Error fetching buildings:', error);
-        alert('Error fetching buildings. Please check the server connection.');
+        showAlert('Error fetching buildings. Please check the server connection.');
     }
 }
 
@@ -561,6 +982,11 @@ async function fetchEvents() {
                 'Authorization': `Bearer ${localStorage.getItem('token')}`
             }
         });
+        if (!response.ok) {
+            const text = await response.text();
+            console.error('Fetch events failed:', response.status, text);
+            throw new Error('Failed to fetch events');
+        }
         const events = await response.json();
         console.log('Fetched events:', events);
         const eventsGrid = document.getElementById('eventsGrid');
@@ -587,7 +1013,7 @@ async function fetchEvents() {
         }
     } catch (error) {
         console.error('Error fetching events:', error);
-        alert('Error fetching events. Please check the server connection.');
+        showAlert('Error fetching events. Please check the server connection.');
     }
 }
 
@@ -612,11 +1038,11 @@ async function addBuilding(event) {
             await fetchBuildings();
         } else {
             const data = await response.json();
-            alert(data.message || 'Failed to add building.');
+            showAlert(data.message || 'Failed to add building.');
         }
     } catch (error) {
         console.error('Error adding building:', error);
-        alert('Error adding building.');
+        showAlert('Error adding building.');
     }
 }
 
@@ -642,11 +1068,11 @@ async function updateBuilding(event) {
             await fetchBuildings();
         } else {
             const data = await response.json();
-            alert(data.message || 'Failed to update building.');
+            showAlert(data.message || 'Failed to update building.');
         }
     } catch (error) {
         console.error('Error updating building:', error);
-        alert('Error updating building.');
+        showAlert('Error updating building.');
     }
 }
 
@@ -682,11 +1108,11 @@ async function deleteBuilding(id) {
             await fetchBuildings();
         } else {
             const data = await response.json();
-            alert(data.message || 'Failed to delete building.');
+            showAlert(data.message || 'Failed to delete building.');
         }
     } catch (error) {
         console.error('Error deleting building:', error);
-        alert('Error deleting building.');
+        showAlert('Error deleting building.');
     }
 }
 
@@ -710,11 +1136,11 @@ async function addEvent(event) {
             await fetchEvents();
         } else {
             const data = await response.json();
-            alert(data.message || 'Failed to add event.');
+            showAlert(data.message || 'Failed to add event.');
         }
     } catch (error) {
         console.error('Error adding event:', error);
-        alert('Error adding event.');
+        showAlert('Error adding event.');
     }
 }
 
@@ -730,11 +1156,11 @@ async function deleteEvent(id) {
             await fetchEvents();
         } else {
             const data = await response.json();
-            alert(data.message || 'Failed to delete event.');
+            showAlert(data.message || 'Failed to delete event.');
         }
     } catch (error) {
         console.error('Error deleting event:', error);
-        alert('Error deleting event.');
+        showAlert('Error deleting event.');
     }
 }
 

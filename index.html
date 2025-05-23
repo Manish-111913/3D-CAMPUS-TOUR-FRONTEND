@@ -94,7 +94,7 @@
                         <label>Full Name</label>
                         <div class="input-group">
                             <span class="input-icon">👤</span>
-                            <input type="text" name="fullName" placeholder="Enter your name">
+                            <input type="text,top" name="fullName" placeholder="Enter your name">
                         </div>
                     </div>
 
@@ -191,6 +191,8 @@
                     <div class="tour-container">
                         <div class="viewer">
                             <canvas id="threeCanvas"></canvas>
+                            <!-- Hotspot UI Overlay -->
+                            <div id="ui-overlay"></div>
                         </div>
                         
                         <div class="controls-sidebar">
@@ -208,6 +210,13 @@
                                     <button id="fullScreenButton">Full Screen</button>
                                     <button id="zoomInButton">Zoom In</button>
                                     <button id="zoomOutButton">Zoom Out</button>
+                                    <!-- Hotspot Controls (Admin Only) -->
+                                    <div id="hotspot-controls" style="display: none;">
+                                        <button id="add-hotspot">Add Hotspot</button>
+                                        <button id="toggle-edit">Edit Mode</button>
+                                        <button id="toggle-delete">Delete Mode</button>
+                                        <button id="clear-all">Clear All</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -232,6 +241,9 @@
                             </div>
                         </div>
                     </div>
+                    <!-- Hotspot Mode Indicator and Counter -->
+                    <div id="mode-indicator">View Mode</div>
+                    <div id="hotspot-counter">Hotspots: 0</div>
                 </div>
 
                 <!-- Buildings View -->
