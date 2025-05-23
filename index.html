@@ -94,7 +94,7 @@
                         <label>Full Name</label>
                         <div class="input-group">
                             <span class="input-icon">👤</span>
-                            <input type="text,top" name="fullName" placeholder="Enter your name">
+                            <input type="text" name="fullName" placeholder="Enter your name">
                         </div>
                     </div>
 
@@ -212,8 +212,7 @@
                                     <button id="zoomOutButton">Zoom Out</button>
                                     <!-- Hotspot Controls (Admin Only) -->
                                     <div id="hotspot-controls" style="display: none;">
-                                        <button id="add-hotspot">Add Hotspot</button>
-                                        <button id="toggle-edit">Edit Mode</button>
+                                        <button id="add-hotspot">Add Hotspot: 0</button>
                                         <button id="toggle-delete">Delete Mode</button>
                                         <button id="clear-all">Clear All</button>
                                     </div>
@@ -241,9 +240,8 @@
                             </div>
                         </div>
                     </div>
-                    <!-- Hotspot Mode Indicator and Counter -->
+                    <!-- Hotspot Mode Indicator -->
                     <div id="mode-indicator">View Mode</div>
-                    <div id="hotspot-counter">Hotspots: 0</div>
                 </div>
 
                 <!-- Buildings View -->
@@ -270,7 +268,6 @@
                                         <option value="./public/student_center.glb">Student Center</option>
                                         <option value="./public/science_building.glb">Science Building</option>
                                         <option value="./public/sports_complex.glb">Sports Complex</option>
-                                        <option value="./public/sports_comple.glb">Sports Comple</option>
                                     </select>
                                 </div>
                                 <button type="submit" class="submit-button">Add Building</button>

@@ -107,7 +107,11 @@ function init3DScene() {
     uiOverlay = document.getElementById('ui-overlay');
     if (userRole === 'admin') {
         document.getElementById('hotspot-controls').style.display = 'flex';
+        document.getElementById('mode-indicator').style.display = 'block';
         initHotspotControls();
+    } else {
+        document.getElementById('hotspot-controls').style.display = 'none';
+        document.getElementById('mode-indicator').style.display = 'none';
     }
 
     // Load default main campus model
@@ -238,11 +242,6 @@ function initHotspotControls() {
         currentMode = 'add';
         updateModeIndicator();
     });
-    document.getElementById('toggle-edit').addEventListener('click', () => {
-        currentMode = currentMode === 'edit' ? 'view' : 'edit';
-        updateModeIndicator();
-        updateHotspotStyles();
-    });
     document.getElementById('toggle-delete').addEventListener('click', () => {
         currentMode = currentMode === 'delete' ? 'view' : 'delete';
         updateModeIndicator();
@@ -263,7 +262,7 @@ function initHotspotControls() {
                         if (h.tooltip) h.tooltip.remove();
                     });
                     hotspots = [];
-                    updateHotspotCounter();
+                    updateAddHotspotButton();
                     showAlert('All hotspots cleared.');
                 } else {
                     const data = await response.json();
@@ -285,18 +284,19 @@ function updateModeIndicator() {
 function updateHotspotStyles() {
     hotspots.forEach(hotspot => {
         if (hotspot.element) {
-            hotspot.element.classList.remove('edit-mode', 'delete-mode');
-            if (currentMode === 'edit') {
-                hotspot.element.classList.add('edit-mode');
-            } else if (currentMode === 'delete') {
+            hotspot.element.classList.remove('delete-mode');
+            if (currentMode === 'delete') {
                 hotspot.element.classList.add('delete-mode');
             }
         }
     });
 }
 
-function updateHotspotCounter() {
-    document.getElementById('hotspot-counter').textContent = `Hotspots: ${hotspots.length}`;
+function updateAddHotspotButton() {
+    const addHotspotButton = document.getElementById('add-hotspot');
+    if (addHotspotButton) {
+        addHotspotButton.textContent = `Add Hotspot: ${hotspots.length}`;
+    }
 }
 
 function createHotspotElement(hotspotData) {
@@ -316,9 +316,9 @@ function createHotspotElement(hotspotData) {
         <h3>Hotspot Info</h3>
         <div class="tooltip-content">${hotspotData.content || 'No information available'}</div>
         ${userRole === 'admin' ? `
-            <textarea style="display: none;">${hotspotData.content || ''}</textarea>
-            <button class="save-btn" style="display: none;">Save</button>
-            <button class="delete-btn" style="display: none;">Delete</button>
+            <textarea style="display: block;">${hotspotData.content || ''}</textarea>
+            <button class="save-btn">Save</button>
+            <button class="delete-btn">Delete</button>
         ` : ''}
         <span class="close-btn">×</span>
     `;
@@ -488,7 +488,7 @@ async function fetchHotspots(modelPath) {
             }
         });
         updateHotspotStyles();
-        updateHotspotCounter();
+        updateAddHotspotButton();
     } catch (error) {
         console.error('Error fetching hotspots:', error);
         showAlert('Error fetching hotspots.');
@@ -525,7 +525,7 @@ async function addHotspot(position) {
                 tooltip: element.tooltip
             };
             hotspots.push(hotspot);
-            updateHotspotCounter();
+            updateAddHotspotButton();
             currentMode = 'view';
             updateModeIndicator();
             updateHotspotStyles();
@@ -553,7 +553,7 @@ async function deleteHotspot(id) {
                 if (hotspot.element) hotspot.element.remove();
                 if (hotspot.tooltip) hotspot.tooltip.remove();
                 hotspots.splice(index, 1);
-                updateHotspotCounter();
+                updateAddHotspotButton();
                 currentMode = 'view';
                 updateModeIndicator();
                 updateHotspotStyles();
@@ -569,52 +569,16 @@ async function deleteHotspot(id) {
 }
 
 function onHotspotMouseDown(event) {
-    if (currentMode !== 'add' && currentMode !== 'edit') return;
+    if (currentMode !== 'add') return;
 
     event.preventDefault();
     mouse.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
     mouse.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
-
-    if (currentMode === 'edit' && userRole === 'admin') {
-        const intersects = raycaster.intersectObjects(hotspots.map(h => {
-            const obj = new THREE.Object3D();
-            obj.position.set(h.position.x, h.position.y, h.position.z);
-            return obj;
-        }));
-        if (intersects.length > 0) {
-            isDragging = true;
-            draggedHotspot = hotspots.find(h => h.position.x === intersects[0].object.position.x &&
-                                               h.position.y === intersects[0].object.position.y &&
-                                               h.position.z === intersects[0].object.position.z);
-        }
-    }
 }
 
 function onHotspotMouseMove(event) {
-    if (isDragging && draggedHotspot && currentMode === 'edit' && userRole === 'admin') {
-        mouse.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
-        mouse.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
-        raycaster.setFromCamera(mouse, camera);
-
-        const intersects = raycaster.intersectObject(currentModel, true);
-        if (intersects.length > 0) {
-            const newPosition = intersects[0].point;
-            draggedHotspot.position = newPosition;
-            updateHotspotPositions();
-
-            fetch(`https://threed-campus-tour-backend.onrender.com/api/hotspots/${draggedHotspot._id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify({ position: newPosition })
-            }).catch(error => {
-                console.error('Error updating hotspot position:', error);
-            });
-        }
-    }
+    // Removed edit mode dragging logic
 }
 
 function onHotspotMouseUp(event) {
@@ -635,8 +599,6 @@ function onHotspotMouseUp(event) {
             console.warn('No intersection with model at:', mouse);
         }
     }
-    isDragging = false;
-    draggedHotspot = null;
 }
 
 function loadModel(url, onSuccess = () => {}) {
@@ -652,7 +614,7 @@ function loadModel(url, onSuccess = () => {}) {
         if (h.tooltip) h.tooltip.remove();
     });
     hotspots = [];
-    updateHotspotCounter();
+    updateAddHotspotButton();
 
     loader.load(
         url,
@@ -875,6 +837,7 @@ async function handleAuth(event) {
     } catch (error) {
         console.error('Connection error:', error);
         showAlert('Unable to connect to the server. Please ensure the backend server is running at https://threed-campus-tour-backend.onrender.com and try again.');
+        // Fallback for offline testing
         const usernameElement = document.querySelector('.username');
         const username = email;
         if (usernameElement) {
@@ -901,7 +864,7 @@ async function fetchBuildings() {
         }
         const buildings = await response.json();
         console.log('Fetched buildings:', buildings);
-        
+
         const buildingsGrid = document.getElementById('buildingsGrid');
         buildingsGrid.innerHTML = '';
         buildings.forEach(building => {
@@ -931,25 +894,31 @@ async function fetchBuildings() {
                 button.textContent = building.name;
                 button.setAttribute('data-model', building.modelPath);
                 button.setAttribute('data-name', building.name);
-                button.setAttribute('data-description', building.description);
+                button.addEventListener('click', () => {
+                    const modelPath = button.getAttribute('data-model');
+                    const name = button.getAttribute('data-name');
+                    currentModelIndex = modelPaths.indexOf(modelPath);
+                    loadModel(modelPath, () => {
+                        document.getElementById('currentLocation').textContent = `Current Location: ${name}`;
+                        document.getElementById('locationDescription').textContent = building.description || 'No description available.';
+                    });
+                });
                 locationList.appendChild(button);
             }
         });
 
+        // Add event listeners for building actions
         document.querySelectorAll('.view-details').forEach(button => {
             button.addEventListener('click', () => {
-                const id = button.getAttribute('data-id');
-                const building = buildings.find(b => b._id === id);
+                const buildingId = button.getAttribute('data-id');
+                const building = buildings.find(b => b._id === buildingId);
                 if (building && building.modelPath) {
-                    setActiveView('tour');
                     currentModelIndex = modelPaths.indexOf(building.modelPath);
-                    if (currentModelIndex === -1) currentModelIndex = 0;
                     loadModel(building.modelPath, () => {
                         document.getElementById('currentLocation').textContent = `Current Location: ${building.name}`;
-                        document.getElementById('locationDescription').textContent = building.description;
+                        document.getElementById('locationDescription').textContent = building.description || 'No description available.';
+                        showView('tourView');
                     });
-                } else {
-                    showAlert('No 3D model associated with this building.');
                 }
             });
         });
@@ -957,21 +926,47 @@ async function fetchBuildings() {
         if (userRole === 'admin') {
             document.querySelectorAll('.edit-building').forEach(button => {
                 button.addEventListener('click', () => {
-                    const id = button.getAttribute('data-id');
-                    const building = buildings.find(b => b._id === id);
-                    showEditBuildingForm(building);
+                    const buildingId = button.getAttribute('data-id');
+                    const building = buildings.find(b => b._id === buildingId);
+                    const editForm = document.getElementById('editBuildingForm');
+                    editForm.querySelector('input[name="id"]').value = building._id;
+                    editForm.querySelector('input[name="name"]').value = building.name;
+                    editForm.querySelector('textarea[name="description"]').value = building.description;
+                    editForm.querySelector(`select[name="modelPath"] option[value="${building.modelPath}"]`).selected = true;
+                    editForm.style.display = 'block';
+                    document.getElementById('addBuildingForm').style.display = 'none';
                 });
             });
+
             document.querySelectorAll('.delete-building').forEach(button => {
                 button.addEventListener('click', async () => {
-                    const id = button.getAttribute('data-id');
-                    await deleteBuilding(id);
+                    const buildingId = button.getAttribute('data-id');
+                    if (confirm('Are you sure you want to delete this building?')) {
+                        try {
+                            const response = await fetch(`https://threed-campus-tour-backend.onrender.com/api/buildings/${buildingId}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                }
+                            });
+                            if (response.ok) {
+                                fetchBuildings();
+                                showAlert('Building deleted successfully.');
+                            } else {
+                                const data = await response.json();
+                                showAlert(data.message || 'Failed to delete building.');
+                            }
+                        } catch (error) {
+                            console.error('Error deleting building:', error);
+                            showAlert('Error deleting building.');
+                        }
+                    }
                 });
             });
         }
     } catch (error) {
         console.error('Error fetching buildings:', error);
-        showAlert('Error fetching buildings. Please check the server connection.');
+        showAlert('Error fetching buildings.');
     }
 }
 
@@ -989,6 +984,7 @@ async function fetchEvents() {
         }
         const events = await response.json();
         console.log('Fetched events:', events);
+
         const eventsGrid = document.getElementById('eventsGrid');
         eventsGrid.innerHTML = '';
         events.forEach(event => {
@@ -996,333 +992,223 @@ async function fetchEvents() {
             eventCard.className = 'event-card';
             eventCard.innerHTML = `
                 <h4>${event.name}</h4>
-                <p>${new Date(event.date).toLocaleDateString()}</p>
-                <button class="learn-more">Learn More</button>
-                ${userRole === 'admin' ? `<button class="delete-event" data-id="${event._id}">Delete</button>` : ''}
+                <p><strong>Date:</strong> ${new Date(event.date).toLocaleDateString()}</p>
+                <button class="learn-more" data-id="${event._id}">Learn More</button>
+                ${userRole === 'admin' ? `
+                    <button class="delete-event" data-id="${event._id}">Delete</button>
+                ` : ''}
             `;
             eventsGrid.appendChild(eventCard);
+        });
+
+        document.querySelectorAll('.learn-more').forEach(button => {
+            button.addEventListener('click', () => {
+                const eventId = button.getAttribute('data-id');
+                const event = events.find(e => e._id === eventId);
+                showAlert(`Event: ${event.name}\nDate: ${new Date(event.date).toLocaleDateString()}\nDetails: Coming soon!`);
+            });
         });
 
         if (userRole === 'admin') {
             document.querySelectorAll('.delete-event').forEach(button => {
                 button.addEventListener('click', async () => {
-                    const id = button.getAttribute('data-id');
-                    await deleteEvent(id);
+                    const eventId = button.getAttribute('data-id');
+                    if (confirm('Are you sure you want to delete this event?')) {
+                        try {
+                            const response = await fetch(`https://threed-campus-tour-backend.onrender.com/api/events/${eventId}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                }
+                            });
+                            if (response.ok) {
+                                fetchEvents();
+                                showAlert('Event deleted successfully.');
+                            } else {
+                                const data = await response.json();
+                                showAlert(data.message || 'Failed to delete event.');
+                            }
+                        } catch (error) {
+                            console.error('Error deleting event:', error);
+                            showAlert('Error deleting event.');
+                        }
+                    }
                 });
             });
         }
     } catch (error) {
         console.error('Error fetching events:', error);
-        showAlert('Error fetching events. Please check the server connection.');
+        showAlert('Error fetching events.');
     }
 }
 
-async function addBuilding(event) {
-    event.preventDefault();
-    const form = document.getElementById('addBuildingForm');
-    const name = form.querySelector('input[name="name"]').value;
-    const description = form.querySelector('textarea[name="description"]').value;
-    const modelPath = form.querySelector('select[name="modelPath"]').value;
-
-    try {
-        const response = await fetch('https://threed-campus-tour-backend.onrender.com/api/buildings', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify({ name, description, modelPath })
-        });
-        if (response.ok) {
-            form.reset();
-            await fetchBuildings();
-        } else {
-            const data = await response.json();
-            showAlert(data.message || 'Failed to add building.');
-        }
-    } catch (error) {
-        console.error('Error adding building:', error);
-        showAlert('Error adding building.');
-    }
-}
-
-async function updateBuilding(event) {
-    event.preventDefault();
-    const form = document.getElementById('editBuildingForm');
-    const id = form.querySelector('input[name="id"]').value;
-    const name = form.querySelector('input[name="name"]').value;
-    const description = form.querySelector('textarea[name="description"]').value;
-    const modelPath = form.querySelector('select[name="modelPath"]').value;
-
-    try {
-        const response = await fetch(`https://threed-campus-tour-backend.onrender.com/api/buildings/${id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify({ name, description, modelPath })
-        });
-        if (response.ok) {
-            hideEditBuildingForm();
-            await fetchBuildings();
-        } else {
-            const data = await response.json();
-            showAlert(data.message || 'Failed to update building.');
-        }
-    } catch (error) {
-        console.error('Error updating building:', error);
-        showAlert('Error updating building.');
-    }
-}
-
-function showEditBuildingForm(building) {
-    const addForm = document.getElementById('addBuildingForm');
-    const editForm = document.getElementById('editBuildingForm');
-    addForm.style.display = 'none';
-    editForm.style.display = 'block';
-
-    editForm.querySelector('input[name="id"]').value = building._id;
-    editForm.querySelector('input[name="name"]').value = building.name;
-    editForm.querySelector('textarea[name="description"]').value = building.description;
-    editForm.querySelector('select[name="modelPath"]').value = building.modelPath || '';
-}
-
-function hideEditBuildingForm() {
-    const addForm = document.getElementById('addBuildingForm');
-    const editForm = document.getElementById('editBuildingForm');
-    addForm.style.display = 'block';
-    editForm.style.display = 'none';
-    editForm.reset();
-}
-
-async function deleteBuilding(id) {
-    try {
-        const response = await fetch(`https://threed-campus-tour-backend.onrender.com/api/buildings/${id}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-        });
-        if (response.ok) {
-            await fetchBuildings();
-        } else {
-            const data = await response.json();
-            showAlert(data.message || 'Failed to delete building.');
-        }
-    } catch (error) {
-        console.error('Error deleting building:', error);
-        showAlert('Error deleting building.');
-    }
-}
-
-async function addEvent(event) {
-    event.preventDefault();
-    const form = document.getElementById('addEventForm');
-    const name = form.querySelector('input[name="name"]').value;
-    const date = form.querySelector('input[name="date"]').value;
-
-    try {
-        const response = await fetch('https://threed-campus-tour-backend.onrender.com/api/events', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify({ name, date })
-        });
-        if (response.ok) {
-            form.reset();
-            await fetchEvents();
-        } else {
-            const data = await response.json();
-            showAlert(data.message || 'Failed to add event.');
-        }
-    } catch (error) {
-        console.error('Error adding event:', error);
-        showAlert('Error adding event.');
-    }
-}
-
-async function deleteEvent(id) {
-    try {
-        const response = await fetch(`https://threed-campus-tour-backend.onrender.com/api/events/${id}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-        });
-        if (response.ok) {
-            await fetchEvents();
-        } else {
-            const data = await response.json();
-            showAlert(data.message || 'Failed to delete event.');
-        }
-    } catch (error) {
-        console.error('Error deleting event:', error);
-        showAlert('Error deleting event.');
-    }
-}
-
-function toggleSidebar() {
-    isSidebarOpen = !isSidebarOpen;
-    const sidebar = document.getElementById('sidebar');
-    const mainContent = document.getElementById('mainContent');
-
-    if (isSidebarOpen) {
-        sidebar.style.width = '16rem';
-        sidebar.classList.remove('collapsed');
-        mainContent.style.marginLeft = '16rem';
-        document.body.classList.remove('sidebar-collapsed');
-    } else {
-        sidebar.style.width = window.innerWidth <= 768 ? '0' : '5rem';
-        sidebar.classList.add('collapsed');
-        mainContent.style.marginLeft = window.innerWidth <= 768 ? '0' : '5rem';
-        document.body.classList.add('sidebar-collapsed');
-    }
-}
-
-function closeSidebarOnMobile() {
-    if (window.innerWidth <= 768 && isSidebarOpen) {
-        toggleSidebar();
-    }
-}
-
-function setActiveView(view) {
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.remove('active');
+function showView(viewId) {
+    document.querySelectorAll('.view').forEach(view => {
+        view.style.display = view.id === viewId ? 'block' : 'none';
     });
-    document.querySelector(`#nav${view.charAt(0).toUpperCase() + view.slice(1)}Button`).classList.add('active');
-
-    document.querySelectorAll('.view').forEach(viewElement => {
-        viewElement.style.display = 'none';
+    document.querySelectorAll('.nav-item').forEach(nav => {
+        nav.classList.toggle('active', nav.id === `nav${viewId.charAt(0).toUpperCase() + viewId.slice(1)}Button`);
     });
-    const viewElement = document.getElementById(`${view}View`);
-    viewElement.style.display = 'block';
-    console.log(`Set view to ${view}, display: ${viewElement.style.display}`);
-
-    const titles = {
-        tour: '3D Tour',
-        buildings: 'Buildings',
-        events: 'Events'
-    };
-    document.getElementById('pageTitle').textContent = titles[view];
-
-    if (view === 'tour') {
-        console.log('Tour view activated');
-        init3DScene();
-    } else if (view === 'buildings') {
-        fetchBuildings();
-    } else if (view === 'events') {
-        fetchEvents();
-    }
-
-    closeSidebarOnMobile();
+    document.getElementById('pageTitle').textContent = viewId === 'tourView' ? '3D Tour' : viewId === 'buildingsView' ? 'Campus Buildings' : 'Upcoming Events';
 }
 
-function handleLogout() {
-    console.log('Logout initiated');
-    localStorage.removeItem('userEmail');
-    localStorage.removeItem('userName');
-    localStorage.removeItem('rememberMe');
-    localStorage.removeItem('token');
-    isThreeJSInitialized = false;
-    userRole = 'user';
-    const usernameElement = document.querySelector('.username');
-    if (usernameElement) {
-        usernameElement.textContent = '';
-        console.log('Username cleared');
-    }
-    showLandingPage();
-    toggleAuthMode();
-    console.log('Logout successful');
-}
-
-// Attach event listeners
-window.addEventListener('load', async () => {
-    console.log('Script loaded');
-    const email = localStorage.getItem('userEmail');
-    const storedUsername = localStorage.getItem('userName');
-    const rememberMe = localStorage.getItem('rememberMe') === 'true';
-
-    if (email && storedUsername && rememberMe) {
-        try {
-            console.log('Attempting auto-login for:', email);
-            const response = await fetch(`https://threed-campus-tour-backend.onrender.com/api/user/${email}`, {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                }
-            });
-            if (response.ok) {
-                const data = await response.json();
-                userRole = data.role || 'user';
-                const usernameElement = document.querySelector('.username');
-                if (usernameElement) {
-                    usernameElement.textContent = storedUsername;
-                    console.log('Auto-login username set:', storedUsername, 'Role:', userRole);
-                }
-                showDashboard();
-            } else {
-                console.warn('Auto-login failed:', response.statusText);
-                localStorage.removeItem('userEmail');
-                localStorage.removeItem('userName');
-                localStorage.removeItem('rememberMe');
-                localStorage.removeItem('token');
-                showLandingPage();
-            }
-        } catch (error) {
-            console.error('Auto-login connection error:', error);
-            localStorage.removeItem('userEmail');
-            localStorage.removeItem('userName');
-            localStorage.removeItem('rememberMe');
-            localStorage.removeItem('token');
-            showLandingPage();
-        }
-    } else {
-        showLandingPage();
-    }
-
+function initEventListeners() {
     document.getElementById('startTourButton').addEventListener('click', () => showAuthForm(true));
     document.getElementById('beginTourButton').addEventListener('click', () => showAuthForm(true));
-    document.getElementById('authFormElement').addEventListener('submit', handleAuth);
     document.getElementById('toggleAuthButton').addEventListener('click', toggleAuthMode);
     document.getElementById('returnHomeButton').addEventListener('click', showLandingPage);
-    document.getElementById('sidebarToggleButton').addEventListener('click', toggleSidebar);
-    document.getElementById('navTourButton').addEventListener('click', () => setActiveView('tour'));
-    document.getElementById('navBuildingsButton').addEventListener('click', () => setActiveView('buildings'));
-    document.getElementById('navEventsButton').addEventListener('click', () => setActiveView('events'));
-    document.getElementById('logoutButton').addEventListener('click', handleLogout);
+    document.getElementById('authFormElement').addEventListener('submit', handleAuth);
+
+    document.getElementById('sidebarToggleButton').addEventListener('click', () => {
+        isSidebarOpen = !isSidebarOpen;
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.toggle('collapsed', !isSidebarOpen);
+        document.body.classList.toggle('sidebar-collapsed', !isSidebarOpen);
+        if (isThreeJSInitialized) {
+            const mainContent = document.getElementById('mainContent');
+            const newWidth = mainContent.clientWidth;
+            const newHeight = document.querySelector('.viewer').clientHeight;
+            camera.aspect = newWidth / newHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(newWidth, newHeight);
+            document.getElementById('threeCanvas').style.width = `${newWidth}px`;
+            document.getElementById('threeCanvas').style.height = `${newHeight}px`;
+            updateHotspotPositions();
+        }
+    });
+
+    document.getElementById('navTourButton').addEventListener('click', () => showView('tourView'));
+    document.getElementById('navBuildingsButton').addEventListener('click', () => showView('buildingsView'));
+    document.getElementById('navEventsButton').addEventListener('click', () => showView('eventsView'));
+
+    document.getElementById('logoutButton').addEventListener('click', () => {
+        localStorage.removeItem('userEmail');
+        localStorage.removeItem('userName');
+        localStorage.removeItem('token');
+        localStorage.removeItem('rememberMe');
+        userRole = 'user';
+        showLandingPage();
+    });
+
     document.getElementById('resetViewButton').addEventListener('click', resetView);
     document.getElementById('fullScreenButton').addEventListener('click', toggleFullScreen);
     document.getElementById('zoomInButton').addEventListener('click', zoomIn);
     document.getElementById('zoomOutButton').addEventListener('click', zoomOut);
-    document.getElementById('mainContent').addEventListener('click', () => {
-        closeSidebarOnMobile();
-    });
-    document.getElementById('addBuildingForm').addEventListener('submit', addBuilding);
-    document.getElementById('editBuildingForm').addEventListener('submit', updateBuilding);
-    document.getElementById('cancelEdit').addEventListener('click', hideEditBuildingForm);
-    document.getElementById('locationList').addEventListener('click', (e) => {
-        if (e.target.tagName === 'BUTTON') {
-            const modelPath = e.target.getAttribute('data-model');
-            const name = e.target.getAttribute('data-name');
-            const description = e.target.getAttribute('data-description');
-            if (modelPath) {
-                currentModelIndex = modelPaths.indexOf(modelPath);
-                if (currentModelIndex === -1) currentModelIndex = 0;
-                loadModel(modelPath, () => {
-                    document.getElementById('currentLocation').textContent = `Current Location: ${name}`;
-                    document.getElementById('locationDescription').textContent = description;
-                });
-            }
-        }
-    });
 
-    window.addEventListener('resize', () => {
-        if (window.innerWidth > 768 && !isSidebarOpen) {
-            toggleSidebar();
-        } else if (window.innerWidth <= 768 && isSidebarOpen) {
-            toggleSidebar();
+    if (userRole === 'admin') {
+        document.getElementById('addBuildingForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const form = event.target;
+            const name = form.querySelector('input[name="name"]').value;
+            const description = form.querySelector('textarea[name="description"]').value;
+            const modelPath = form.querySelector('select[name="modelPath"]').value;
+
+            try {
+                const response = await fetch('https://threed-campus-tour-backend.onrender.com/api/buildings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ name, description, modelPath })
+                });
+                if (response.ok) {
+                    form.reset();
+                    fetchBuildings();
+                    showAlert('Building added successfully.');
+                } else {
+                    const data = await response.json();
+                    showAlert(data.message || 'Failed to add building.');
+                }
+            } catch (error) {
+                console.error('Error adding building:', error);
+                showAlert('Error adding building.');
+            }
+        });
+
+        document.getElementById('editBuildingForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const form = event.target;
+            const id = form.querySelector('input[name="id"]').value;
+            const name = form.querySelector('input[name="name"]').value;
+            const description = form.querySelector('textarea[name="description"]').value;
+            const modelPath = form.querySelector('select[name="modelPath"]').value;
+
+            try {
+                const response = await fetch(`https://threed-campus-tour-backend.onrender.com/api/buildings/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ name, description, modelPath })
+                });
+                if (response.ok) {
+                    form.reset();
+                    form.style.display = 'none';
+                    document.getElementById('addBuildingForm').style.display = 'block';
+                    fetchBuildings();
+                    showAlert('Building updated successfully.');
+                } else {
+                    const data = await response.json();
+                    showAlert(data.message || 'Failed to update building.');
+                }
+            } catch (error) {
+                console.error('Error updating building:', error);
+                showAlert('Error updating building.');
+            }
+        });
+
+        document.getElementById('cancelEdit').addEventListener('click', () => {
+            const editForm = document.getElementById('editBuildingForm');
+            editForm.reset();
+            editForm.style.display = 'none';
+            document.getElementById('addBuildingForm').style.display = 'block';
+        });
+
+        document.getElementById('addEventForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const form = event.target;
+            const name = form.querySelector('input[name="name"]').value;
+            const date = form.querySelector('input[name="date"]').value;
+
+            try {
+                const response = await fetch('https://threed-campus-tour-backend.onrender.com/api/events', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ name, date })
+                });
+                if (response.ok) {
+                    form.reset();
+                    fetchEvents();
+                    showAlert('Event added successfully.');
+                } else {
+                    const data = await response.json();
+                    showAlert(data.message || 'Failed to add event.');
+                }
+            } catch (error) {
+                console.error('Error adding event:', error);
+                showAlert('Error adding event.');
+            }
+        });
+    }
+}
+
+// Initialize the application
+document.addEventListener('DOMContentLoaded', () => {
+    if (localStorage.getItem('rememberMe') === 'true' && localStorage.getItem('userEmail')) {
+        const usernameElement = document.querySelector('.username');
+        const username = localStorage.getItem('userName') || localStorage.getItem('userEmail');
+        if (usernameElement) {
+            usernameElement.textContent = username;
         }
-    });
+        userRole = 'user'; // Default to user; actual role would be fetched from backend
+        showDashboard();
+    } else {
+        showLandingPage();
+    }
+    initEventListeners();
 });
