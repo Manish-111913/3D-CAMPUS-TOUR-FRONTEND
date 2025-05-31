@@ -30,15 +30,35 @@ function showAlert(message) {
 // Predefined list of available .glb models
 const availableModels = {
     './public/main_campus.glb': 'Main Campus',
-    './public/library.glb': 'Library',
-    './public/student_center.glb': 'Student Center',
-    './public/science_building.glb': 'Science Building',
-    './public/sports_complex.glb': 'Sports Complex'
+    './public/canteen.glb': 'Canteen',
+    './public/fs_labs.glb': 'fS Lab',
+    './public/nps_class_rooms.glb': 'Non-PS Classroom',
+    './public/main_campus_basketball_court_view.glb': 'Main Building BasketBall Court View',
 };
 
 // Track current model index for hotspot cycling
 let currentModelIndex = 0;
 const modelPaths = Object.keys(availableModels);
+
+// Throttle utility
+function throttle(func, limit) {
+    let lastFunc;
+    let lastRan;
+    return function (...args) {
+        if (!lastRan) {
+            func.apply(this, args);
+            lastRan = Date.now();
+        } else {
+            clearTimeout(lastFunc);
+            lastFunc = setTimeout(() => {
+                if ((Date.now() - lastRan) >= limit) {
+                    func.apply(this, args);
+                    lastRan = Date.now();
+                }
+            }, limit - (Date.now() - lastRan));
+        }
+    };
+}
 
 function init3DScene() {
     if (isThreeJSInitialized) {
@@ -54,13 +74,13 @@ function init3DScene() {
     const container = document.querySelector('.viewer');
     const mainContent = document.getElementById('mainContent');
 
-    const sidebarWidth = isSidebarOpen ? 16 * 16 : 5 * 16; // 16rem or 5rem in pixels (1rem = 16px)
+    const sidebarWidth = isSidebarOpen ? 16 * 16 : 5 * 16;
     const availableWidth = mainContent.clientWidth;
     console.log('Main content width:', mainContent.clientWidth, 'Sidebar width:', sidebarWidth);
 
     initialCanvasSize = {
         width: availableWidth,
-        height: container.clientHeight // Use CSS-defined height (e.g., 500px)
+        height: container.clientHeight
     };
     console.log('Initial canvas size:', initialCanvasSize);
 
@@ -73,8 +93,9 @@ function init3DScene() {
 
     renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
     renderer.setSize(initialCanvasSize.width, initialCanvasSize.height);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap pixel ratio
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer, more performant shadows
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 2.0;
     canvas.style.width = `${initialCanvasSize.width}px`;
@@ -93,8 +114,8 @@ function init3DScene() {
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
     dirLight.position.set(10, 20, 10);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.mapSize.width = 1024; // Reduced for performance
+    dirLight.shadow.mapSize.height = 1024;
     scene.add(dirLight);
 
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0x888888, 1.0);
@@ -143,7 +164,7 @@ function init3DScene() {
 
     document.addEventListener('fullscreenchange', onFullscreenChange);
 
-    window.addEventListener('resize', () => {
+    window.addEventListener('resize', throttle(() => {
         const newWidth = mainContent.clientWidth;
         const newHeight = container.clientHeight;
         camera.aspect = newWidth / newHeight;
@@ -152,7 +173,10 @@ function init3DScene() {
         canvas.style.width = `${newWidth}px`;
         canvas.style.height = `${newHeight}px`;
         updateHotspotPositions();
-    });
+    }, 100));
+
+    let lastCameraPosition = camera.position.clone();
+    let lastCameraRotation = camera.rotation.clone();
 
     function animate() {
         requestAnimationFrame(animate);
@@ -168,7 +192,13 @@ function init3DScene() {
         controls.getObject().translateX(velocity.x * delta);
         controls.getObject().translateZ(velocity.z * delta);
 
-        updateHotspotPositions();
+        const positionChanged = !lastCameraPosition.equals(camera.position);
+        const rotationChanged = !lastCameraRotation.equals(camera.rotation);
+        if (positionChanged || rotationChanged) {
+            updateHotspotPositions();
+            lastCameraPosition.copy(camera.position);
+            lastCameraRotation.copy(camera.rotation);
+        }
 
         renderer.render(scene, camera);
     }
@@ -223,7 +253,7 @@ function init3DScene() {
     });
 
     canvas.addEventListener('mousedown', onHotspotMouseDown);
-    canvas.addEventListener('mousemove', onHotspotMouseMove);
+    canvas.addEventListener('mousemove', throttle(onHotspotMouseMove, 50));
     canvas.addEventListener('mouseup', onHotspotMouseUp);
 }
 
@@ -429,24 +459,29 @@ function updateTooltipPosition(hotspotData, hotspot, tooltip) {
 }
 
 function updateHotspotPositions() {
-    hotspots.forEach(hotspot => {
+    const canvas = renderer.domElement;
+    const updates = hotspots.map(hotspot => {
         if (!hotspot.element || !hotspot.element.style || !hotspot.position) {
             console.warn('Invalid hotspot:', hotspot);
-            return;
+            return null;
         }
         const vector = new THREE.Vector3(hotspot.position.x, hotspot.position.y, hotspot.position.z);
         vector.project(camera);
-
-        const canvas = renderer.domElement;
         const x = (vector.x * 0.5 + 0.5) * canvas.clientWidth;
         const y = (-vector.y * 0.5 + 0.5) * canvas.clientHeight;
+        return { hotspot, x, y };
+    });
 
-        hotspot.element.style.left = `${x}px`;
-        hotspot.element.style.top = `${y}px`;
-
-        if (hotspot.tooltip.style.display === 'block') {
-            updateTooltipPosition(hotspot, hotspot.element, hotspot.tooltip);
-        }
+    requestAnimationFrame(() => {
+        updates.forEach(update => {
+            if (!update) return;
+            const { hotspot, x, y } = update;
+            hotspot.element.style.left = `${x}px`;
+            hotspot.element.style.top = `${y}px`;
+            if (hotspot.tooltip.style.display === 'block') {
+                updateTooltipPosition(hotspot, hotspot.element, hotspot.tooltip);
+            }
+        });
     });
 }
 
@@ -587,7 +622,15 @@ function onHotspotMouseUp(event) {
     }
 }
 
+let isLoadingModel = false;
+
 function loadModel(url, onSuccess = () => {}) {
+    if (isLoadingModel) {
+        console.log('Model loading in progress, skipping:', url);
+        return;
+    }
+    isLoadingModel = true;
+
     console.log('Loading model:', url);
     const loader = new THREE.GLTFLoader();
     if (currentModel) {
@@ -614,6 +657,10 @@ function loadModel(url, onSuccess = () => {}) {
                     child.material.metalness = 0.1;
                     child.material.emissive = new THREE.Color(0x000000);
                     child.material.emissiveIntensity = 0.0;
+                    if (child.geometry) {
+                        child.geometry.computeVertexNormals();
+                        child.geometry.computeBoundingBox();
+                    }
                 }
             });
 
@@ -626,12 +673,14 @@ function loadModel(url, onSuccess = () => {}) {
             currentModel = gltf.scene;
             console.log('Model loaded:', gltf.scene.position, gltf.scene.scale);
             fetchHotspots(url);
+            isLoadingModel = false;
             onSuccess();
         },
         undefined,
         (error) => {
             console.error('Error loading model:', error);
             showAlert(`Failed to load 3D model: ${url}. Ensure the file exists in the public folder.`);
+            isLoadingModel = false;
         }
     );
 }
@@ -639,14 +688,25 @@ function loadModel(url, onSuccess = () => {}) {
 function disposeModel(model) {
     model.traverse((child) => {
         if (child.isMesh) {
-            child.geometry.dispose();
+            if (child.geometry) {
+                child.geometry.dispose();
+            }
             if (Array.isArray(child.material)) {
-                child.material.forEach(m => m.dispose());
-            } else {
+                child.material.forEach(m => {
+                    if (m.map) m.map.dispose();
+                    if (m.normalMap) m.normalMap.dispose();
+                    if (m.roughnessMap) m.roughnessMap.dispose();
+                    m.dispose();
+                });
+            } else if (child.material) {
+                if (child.material.map) child.material.map.dispose();
+                if (child.material.normalMap) child.material.normalMap.dispose();
+                if (child.material.roughnessMap) child.material.roughnessMap.dispose();
                 child.material.dispose();
             }
         }
     });
+    model = null;
 }
 
 function resetView() {
@@ -844,8 +904,7 @@ async function fetchBuildings() {
         });
         const buildings = await response.json();
         console.log('Fetched buildings:', buildings);
-        
-        // Update buildings grid
+
         const buildingsGrid = document.getElementById('buildingsGrid');
         buildingsGrid.innerHTML = '';
         buildings.forEach(building => {
@@ -867,7 +926,6 @@ async function fetchBuildings() {
             buildingsGrid.appendChild(buildingCard);
         });
 
-        // Update location list in tour view
         const locationList = document.getElementById('locationList');
         locationList.innerHTML = '';
         buildings.forEach(building => {
@@ -881,7 +939,6 @@ async function fetchBuildings() {
             }
         });
 
-        // Add event listeners for view, edit, and delete
         document.querySelectorAll('.view-details').forEach(button => {
             button.addEventListener('click', () => {
                 const id = button.getAttribute('data-id');
@@ -1227,13 +1284,13 @@ function initEventListeners() {
         }
     });
 
-    window.addEventListener('resize', () => {
+    window.addEventListener('resize', throttle(() => {
         if (window.innerWidth > 768 && !isSidebarOpen) {
             toggleSidebar();
         } else if (window.innerWidth <= 768 && isSidebarOpen) {
             toggleSidebar();
         }
-    });
+    }, 100));
 }
 
 // Initialize the application
@@ -1282,7 +1339,6 @@ window.addEventListener('load', async () => {
 
     initEventListeners();
 
-    // Attach form submission listeners
     document.getElementById('addBuildingForm').addEventListener('submit', addBuilding);
     document.getElementById('editBuildingForm').addEventListener('submit', updateBuilding);
     document.getElementById('addEventForm').addEventListener('submit', addEvent);
